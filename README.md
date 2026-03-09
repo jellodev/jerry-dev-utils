@@ -10,6 +10,16 @@ Claude Code 플러그인 - 개발 워크플로우 유틸리티 커맨드 모음.
 |---|---|
 | `/docs-update` | 프로젝트 루트 하위 MD 파일을 코드 현황에 맞게 최신화 |
 
+## Shell 유틸리티
+
+| 유틸리티 | 설명 |
+|---|---|
+| `sts-notifier` | STS 임시 자격증명 만료 1시간/10분 전 macOS 알림 + Claude Code 하단 progress bar |
+
+설치 방법: [`docs/sts-notifier-setup.md`](docs/sts-notifier-setup.md)
+
+테스트: `bats --recursive sts-notifier/test/` (requires `brew install bats-core`)
+
 ## 요구사항
 
 - [Claude Code](https://claude.ai/code) 설치

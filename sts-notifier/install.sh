@@ -24,8 +24,22 @@ NOTIFIER_DIR="$SCRIPT_DIR"
 
 # ─── 플래그 파싱 ─────────────────────────────────────────────────
 UPDATE_MODE=false
-[[ "${1:-}" == "--update" ]] && UPDATE_MODE=true
+if [[ "${1:-}" == "--update" ]]; then
+  UPDATE_MODE=true
+  info "업데이트 모드로 실행합니다."
+elif [[ -n "${1:-}" ]]; then
+  warn "알 수 없는 옵션: ${1:-}. 무시합니다."
+fi
 
 # ─── 실행 권한 보장 ───────────────────────────────────────────────
+if [[ ! -f "$NOTIFIER_DIR/check-sts-expiry.sh" ]]; then
+  error "check-sts-expiry.sh 파일을 찾을 수 없습니다: $NOTIFIER_DIR/check-sts-expiry.sh"
+  exit 1
+fi
 chmod +x "$NOTIFIER_DIR/check-sts-expiry.sh"
+
+if [[ ! -f "$NOTIFIER_DIR/sts-statusline.sh" ]]; then
+  error "sts-statusline.sh 파일을 찾을 수 없습니다: $NOTIFIER_DIR/sts-statusline.sh"
+  exit 1
+fi
 chmod +x "$NOTIFIER_DIR/sts-statusline.sh"
