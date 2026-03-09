@@ -14,7 +14,7 @@ Claude Code 플러그인 - 개발 워크플로우 유틸리티 커맨드 모음.
 
 | 유틸리티 | 설명 |
 |---|---|
-| `sts-notifier` | STS 임시 자격증명 만료 1시간/10분 전 macOS 알림 + Claude Code 하단 progress bar |
+| `sts-notifier` | STS 임시 자격증명 만료 1시간/10분 전 macOS 알림 + Claude Code 하단 progress bar. `./install.sh` 한 번으로 설치. |
 
 설치 방법: [`docs/sts-notifier-setup.md`](docs/sts-notifier-setup.md)
 
