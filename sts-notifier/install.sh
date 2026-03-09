@@ -136,3 +136,63 @@ SHELL_TYPE="$(detect_shell)"
 [[ "$SHELL_TYPE" == "unknown" ]] && guide_shell_install
 
 info "환경 감지: OS=$OS / Shell=$SHELL_TYPE"
+
+# ─── 의존성 확인 ──────────────────────────────────────────────────
+
+check_python3() {
+  if command -v python3 &>/dev/null; then
+    success "python3 확인됨: $(python3 --version 2>&1)"
+    return 0
+  fi
+
+  error "python3가 설치되어 있지 않습니다."
+  echo ""
+  echo "  아래 명령어로 python3를 설치한 뒤 install.sh를 다시 실행해 주세요."
+  echo ""
+  case "$OS" in
+    macos)
+      echo "    brew install python3"
+      ;;
+    wsl|linux)
+      echo "    sudo apt install -y python3"
+      ;;
+    gitbash)
+      echo "    1. https://www.python.org/downloads/ 에서 설치 파일 다운로드"
+      echo "    2. 설치 화면에서 'Add Python to PATH' 체크박스를 반드시 선택"
+      echo "    3. 설치 완료 후 Git Bash를 재시작하고 ./install.sh 재실행"
+      ;;
+    *)
+      echo "    https://www.python.org/downloads/ 에서 설치하세요."
+      ;;
+  esac
+  exit 1
+}
+
+check_claude_dir() {
+  if [[ -d "$HOME/.claude" ]]; then
+    return 0
+  fi
+
+  warn "~/.claude 디렉토리가 없습니다."
+  echo ""
+  echo "  Claude Code가 설치되어 있지 않은 것 같습니다."
+  echo "  Claude Code 설치: https://claude.ai/code"
+  echo ""
+  ask "  Claude Code 없이 계속 진행할까요? (statusLine 설정은 건너뜁니다) (y/N)"
+  read -r resp
+  if [[ "${resp,,}" != "y" ]]; then
+    echo ""
+    echo "  설치를 중단합니다. Claude Code 설치 후 다시 실행해 주세요."
+    exit 0
+  fi
+  SKIP_STATUSLINE=true
+  warn "statusLine 설정을 건너뜁니다."
+}
+
+# 전역 플래그
+SKIP_STATUSLINE=false
+
+# ─── 의존성 확인 실행 ─────────────────────────────────────────────
+info "의존성 확인 중..."
+check_python3
+check_claude_dir
