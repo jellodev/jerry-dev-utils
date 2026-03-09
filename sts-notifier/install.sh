@@ -338,16 +338,19 @@ except Exception as e:
     fi
   fi
 
-  # 백업 후 수정
+  # 백업 후 수정 (tmpfile+mv: python3 실패 시 기존 파일 보존)
   cp "$settings" "${settings}.sts-notifier.bak"
+  local settings_tmp
+  settings_tmp="$(mktemp)"
   python3 -c "
 import json, sys
 data = json.load(open(sys.argv[1]))
 data['statusLine'] = {'type': 'command', 'command': sys.argv[2], 'padding': 1}
-with open(sys.argv[1], 'w') as f:
+with open(sys.argv[3], 'w') as f:
     json.dump(data, f, indent=2, ensure_ascii=False)
     f.write('\n')
-" "$settings" "$script_cmd"
+" "$settings" "$script_cmd" "$settings_tmp"
+  mv "$settings_tmp" "$settings"
   success "settings.json 업데이트 완료"
   info "백업 파일: ${settings}.sts-notifier.bak"
 }
