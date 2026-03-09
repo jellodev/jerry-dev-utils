@@ -138,6 +138,7 @@ SHELL_TYPE="$(detect_shell)"
 info "환경 감지: OS=$OS / Shell=$SHELL_TYPE"
 
 # ─── 의존성 확인 ──────────────────────────────────────────────────
+SKIP_STATUSLINE=false
 
 check_python3() {
   if command -v python3 &>/dev/null; then
@@ -179,7 +180,7 @@ check_claude_dir() {
   echo "  Claude Code 설치: https://claude.ai/code"
   echo ""
   ask "  Claude Code 없이 계속 진행할까요? (statusLine 설정은 건너뜁니다) (y/N)"
-  read -r resp
+  read -r resp </dev/tty || resp=""
   if [[ "${resp,,}" != "y" ]]; then
     echo ""
     echo "  설치를 중단합니다. Claude Code 설치 후 다시 실행해 주세요."
@@ -188,9 +189,6 @@ check_claude_dir() {
   SKIP_STATUSLINE=true
   warn "statusLine 설정을 건너뜁니다."
 }
-
-# 전역 플래그
-SKIP_STATUSLINE=false
 
 # ─── 의존성 확인 실행 ─────────────────────────────────────────────
 info "의존성 확인 중..."
