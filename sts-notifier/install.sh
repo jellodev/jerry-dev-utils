@@ -247,3 +247,112 @@ print(src.replace('REPLACE_WITH_SCRIPT_PATH', sys.argv[2]), end='')
 # ─── launchd 설치 실행 ────────────────────────────────────────────
 info "launchd 알림 데몬 설치 중..."
 install_launchd
+
+# ─── statusLine 스크립트 설치 ─────────────────────────────────────
+
+install_statusline_script() {
+  [[ "$SKIP_STATUSLINE" == true ]] && return 0
+
+  local src="$NOTIFIER_DIR/sts-statusline.sh"
+  local dst="$HOME/.claude/sts-statusline.sh"
+
+  if [[ "$OS" == "gitbash" ]]; then
+    # Windows Git Bash: symlink 권한 불가 → 파일 복사
+    if [[ "$UPDATE_MODE" == true ]] || [[ ! -f "$dst" ]]; then
+      cp "$src" "$dst"
+      chmod +x "$dst"
+      success "sts-statusline.sh 복사 완료 (Windows 환경)"
+      if [[ "$UPDATE_MODE" == true ]]; then
+        info "스크립트가 최신 버전으로 업데이트됐습니다."
+      else
+        warn "스크립트 업데이트 시: ./install.sh --update 를 다시 실행하세요."
+      fi
+    else
+      info "sts-statusline.sh 이미 설치되어 있습니다. (건너뜀)"
+      info "최신 버전으로 업데이트하려면: ./install.sh --update"
+    fi
+  else
+    # macOS / WSL: 심볼릭 링크 (git pull 즉시 반영)
+    ln -sf "$src" "$dst"
+    success "심볼릭 링크 생성 완료"
+    info "  $dst → $src"
+  fi
+}
+
+# ─── settings.json 수정 ───────────────────────────────────────────
+
+install_settings_json() {
+  [[ "$SKIP_STATUSLINE" == true ]] && return 0
+
+  local settings="$HOME/.claude/settings.json"
+  local script_cmd="$HOME/.claude/sts-statusline.sh"
+
+  # 파일 없으면 새로 생성
+  if [[ ! -f "$settings" ]]; then
+    python3 -c "
+import json, sys
+data = {'statusLine': {'type': 'command', 'command': sys.argv[1], 'padding': 1}}
+with open(sys.argv[2], 'w') as f:
+    json.dump(data, f, indent=2, ensure_ascii=False)
+    f.write('\n')
+" "$script_cmd" "$settings"
+    success "~/.claude/settings.json 생성 완료"
+    return 0
+  fi
+
+  # 기존 settings.json 파싱
+  local existing parse_result
+  parse_result=$(python3 -c "
+import json, sys
+try:
+    data = json.load(open(sys.argv[1]))
+    sl = data.get('statusLine')
+    if sl:
+        print('HAS_STATUSLINE')
+        print(json.dumps(sl, ensure_ascii=False))
+    else:
+        print('NO_STATUSLINE')
+except Exception as e:
+    print('PARSE_ERROR:' + str(e))
+    sys.exit(0)
+" "$settings")
+
+  if [[ "$parse_result" == PARSE_ERROR* ]]; then
+    error "settings.json 파싱 실패: ${parse_result#PARSE_ERROR:}"
+    error "파일을 직접 확인하세요: $settings"
+    return 1
+  fi
+
+  if [[ "$parse_result" == HAS_STATUSLINE* ]]; then
+    local existing_json
+    existing_json="$(echo "$parse_result" | tail -n 1)"
+    echo ""
+    warn "이미 statusLine이 설정되어 있습니다:"
+    echo "  $existing_json"
+    echo ""
+    ask "STS Notifier로 교체할까요? (y/N)"
+    read -r resp </dev/tty || resp=""
+    if [[ "${resp,,}" != "y" ]]; then
+      info "statusLine 설정을 건너뜁니다."
+      return 0
+    fi
+  fi
+
+  # 백업 후 수정
+  cp "$settings" "${settings}.sts-notifier.bak"
+  python3 -c "
+import json, sys
+data = json.load(open(sys.argv[1]))
+data['statusLine'] = {'type': 'command', 'command': sys.argv[2], 'padding': 1}
+with open(sys.argv[1], 'w') as f:
+    json.dump(data, f, indent=2, ensure_ascii=False)
+    f.write('\n')
+" "$settings" "$script_cmd"
+  success "settings.json 업데이트 완료"
+  info "백업 파일: ${settings}.sts-notifier.bak"
+}
+
+# ─── statusLine 설치 실행 ─────────────────────────────────────────
+info "Claude Code statusLine 설정 중..."
+install_statusline_script
+install_settings_json
