@@ -512,6 +512,125 @@ PYEOF
 info "rc 파일 패치 중..."
 patch_rc_file
 
+# ─── claude-sts alias 설치 ────────────────────────────────────────
+
+install_claude_sts() {
+  local rc_file
+  rc_file="$(get_rc_file)"
+
+  # 이미 claude-sts 가 있으면 건너뜀 (멱등성)
+  if grep -q "claude-sts" "$rc_file" 2>/dev/null; then
+    success "claude-sts 이미 설정되어 있습니다. (건너뜀)"
+    return 0
+  fi
+
+  # 닉네임 입력
+  echo ""
+  ask "  Claude STS 발급에 사용할 닉네임을 입력하세요 (영문, 예: john):"
+  read -r sts_username </dev/tty || sts_username=""
+  if [[ -z "$sts_username" ]]; then
+    warn "닉네임이 입력되지 않아 claude-sts 설정을 건너뜁니다."
+    return 0
+  fi
+
+  # 개발자 여부 → role 결정
+  echo ""
+  ask "  개발자이신가요? (y/N)"
+  read -r is_dev </dev/tty || is_dev=""
+  local sts_role
+  if [[ "${is_dev,,}" == "y" ]]; then
+    sts_role="abac-bedrock-developer"
+  else
+    sts_role="abac-bedrock-non-engineer"
+  fi
+
+  # rc 파일에 추가할 블록 작성
+  # __CLAUDE_STS_START__ / __CLAUDE_STS_END__ 마커로 멱등성 보장
+  local sts_block
+  sts_block="
+# __CLAUDE_STS_START__ (sts-notifier 자동 삽입 - 수동 수정 금지)
+# Claude Bedrock STS 공통 갱신 함수
+_sts_update() {
+  local profile=\"\$1\"
+  local url=\"\$2\"
+  local payload=\"\$3\"
+  local prompt_label=\"\$4\"
+
+  echo -n \"\${prompt_label}: \"
+  read -r mfa
+
+  local result
+  result=\$(curl -sf --location --request POST \"\$url\" \\
+    --header 'Content-Type: application/json' \\
+    --data \"\$(echo \"\$payload\" | sed \"s/__MFA__/\$mfa/g\")\")
+
+  if [[ \$? -ne 0 ]] || [[ -z \"\$result\" ]]; then
+    echo \"❌ STS 요청 실패 (네트워크 오류 또는 빈 응답)\"
+    return 1
+  fi
+
+  local key secret token region
+  key=\$(echo \"\$result\" | python3 -c \"import sys,json; d=json.load(sys.stdin); print(d.get('access_key_id',''))\" 2>/dev/null)
+  secret=\$(echo \"\$result\" | python3 -c \"import sys,json; d=json.load(sys.stdin); print(d.get('secret_access_key',''))\" 2>/dev/null)
+  token=\$(echo \"\$result\" | python3 -c \"import sys,json; d=json.load(sys.stdin); print(d.get('session_token',''))\" 2>/dev/null)
+  region=\$(echo \"\$result\" | python3 -c \"import sys,json; d=json.load(sys.stdin); print(d.get('region',''))\" 2>/dev/null)
+
+  if [[ -z \"\$key\" || \"\$key\" == \"None\" ]]; then
+    echo \"❌ 자격증명 파싱 실패: \$result\"
+    return 1
+  fi
+
+  aws configure set aws_access_key_id \"\$key\" --profile \"\$profile\"
+  aws configure set aws_secret_access_key \"\$secret\" --profile \"\$profile\"
+  aws configure set aws_session_token \"\$token\" --profile \"\$profile\"
+  [[ -n \"\$region\" && \"\$region\" != \"None\" ]] && aws configure set region \"\$region\" --profile \"\$profile\"
+
+  echo \"✅ [\$profile] AWS credentials updated\"
+
+  # expiry 저장
+  local __expiry_utc
+  __expiry_utc=\$(echo \"\${result:-}\" | python3 -c \"
+import sys, json
+try:
+    d = json.load(sys.stdin)
+    v = d.get('expires_at_utc', '')
+    if v:
+        print(v)
+except Exception:
+    pass
+\" 2>/dev/null || true)
+  if [[ -n \"\${__expiry_utc:-}\" && \"\${__expiry_utc:-}\" != \"null\" ]]; then
+    echo \"\${__expiry_utc/ UTC/}\" | sed \"s/ /T/;s/\$/Z/\" > \"\${HOME}/.sts_expiry\"
+    rm -f \"\${HOME}/.sts_notified_1h\" \"\${HOME}/.sts_notified_10m\" \"\${HOME}/.sts_notified_expired\"
+  fi
+}
+
+# claude-sts: Claude Code Bedrock STS 발급
+claude-sts() {
+  _sts_update \\
+    \"abac-bedrock-developer\" \\
+    \"https://sts.inhouse.connexioh.com/api/assume\" \\
+    '{\"username\": \"${sts_username}\", \"token\": \"__MFA__\", \"role\": \"${sts_role}\"}' \\
+    \"claude-mfa\"
+}
+
+# Claude Bedrock 환경변수
+export CLAUDE_CODE_USE_BEDROCK=1
+export AWS_PROFILE=abac-bedrock-developer
+export AWS_REGION=ap-northeast-2
+# __CLAUDE_STS_END__"
+
+  # 백업
+  cp "$rc_file" "${rc_file}.sts-notifier.bak"
+
+  printf '%s\n' "$sts_block" >> "$rc_file"
+  success "claude-sts 설정 완료 (username: $sts_username, role: $sts_role)"
+  info "추가된 위치: $rc_file"
+}
+
+info "claude-sts alias 설정 중..."
+install_claude_sts
+
 # ─── 설치 후 자동 검증 ────────────────────────────────────────────
 
 verify_installation() {
