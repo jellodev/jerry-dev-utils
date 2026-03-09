@@ -194,3 +194,47 @@ check_claude_dir() {
 info "의존성 확인 중..."
 check_python3
 check_claude_dir
+
+# ─── launchd 알림 데몬 설치 (macOS 전용) ─────────────────────────
+
+install_launchd() {
+  if [[ "$OS" != "macos" ]]; then
+    warn "launchd는 macOS 전용입니다. ($OS 환경) → 건너뜁니다."
+    warn "알림 기능 없이 Claude Code 상태바만 사용됩니다."
+    return 0
+  fi
+
+  local plist_src="$NOTIFIER_DIR/com.jellodev.sts-notifier.plist"
+  local plist_dst="$HOME/Library/LaunchAgents/com.jellodev.sts-notifier.plist"
+  local script_path="$NOTIFIER_DIR/check-sts-expiry.sh"
+
+  # plist 소스 파일 존재 확인
+  if [[ ! -f "$plist_src" ]]; then
+    error "plist 파일을 찾을 수 없습니다: $plist_src"
+    exit 1
+  fi
+
+  # LaunchAgents 디렉토리 생성 (없을 경우)
+  mkdir -p "$HOME/Library/LaunchAgents"
+
+  # plist 내 경로 플레이스홀더를 실제 경로로 치환해 목적지에 쓰기
+  sed "s|REPLACE_WITH_SCRIPT_PATH|$script_path|g" "$plist_src" > "$plist_dst"
+
+  # 이미 로드된 에이전트면 언로드 후 재로드 (업데이트 지원)
+  if launchctl list 2>/dev/null | grep -q "com.jellodev.sts-notifier"; then
+    launchctl unload "$plist_dst" 2>/dev/null || true
+    info "기존 launchd 에이전트를 언로드했습니다."
+  fi
+
+  if launchctl load "$plist_dst"; then
+    success "launchd 알림 데몬 설치 완료 (1분마다 STS 만료 체크)"
+  else
+    error "launchd 에이전트 로드에 실패했습니다."
+    error "수동 설치: launchctl load $plist_dst"
+    exit 1
+  fi
+}
+
+# ─── launchd 설치 실행 ────────────────────────────────────────────
+info "launchd 알림 데몬 설치 중..."
+install_launchd
