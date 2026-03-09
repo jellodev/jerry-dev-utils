@@ -43,3 +43,92 @@ if [[ ! -f "$NOTIFIER_DIR/sts-statusline.sh" ]]; then
   exit 1
 fi
 chmod +x "$NOTIFIER_DIR/sts-statusline.sh"
+
+# ─── OS 감지 ─────────────────────────────────────────────────────
+detect_os() {
+  case "$OSTYPE" in
+    darwin*)
+      echo "macos"
+      ;;
+    linux*)
+      if grep -qiE "microsoft|wsl" /proc/version 2>/dev/null; then
+        echo "wsl"
+      else
+        echo "linux"
+      fi
+      ;;
+    msys*|cygwin*)
+      echo "gitbash"
+      ;;
+    *)
+      echo "unknown"
+      ;;
+  esac
+}
+
+# ─── Shell 감지 ───────────────────────────────────────────────────
+detect_shell() {
+  local shell_name
+  shell_name="$(basename "${SHELL:-}" 2>/dev/null || echo "")"
+  case "$shell_name" in
+    zsh)  echo "zsh"  ;;
+    bash) echo "bash" ;;
+    *)    echo "unknown" ;;
+  esac
+}
+
+# ─── rc 파일 경로 결정 ────────────────────────────────────────────
+# macOS bash → ~/.bash_profile, 그 외 bash → ~/.bashrc, zsh → ~/.zshrc
+get_rc_file() {
+  case "$SHELL_TYPE" in
+    zsh)
+      echo "$HOME/.zshrc"
+      ;;
+    bash)
+      if [[ "$OS" == "macos" ]]; then
+        echo "$HOME/.bash_profile"
+      else
+        echo "$HOME/.bashrc"
+      fi
+      ;;
+  esac
+}
+
+# ─── 미지원 shell 안내 ────────────────────────────────────────────
+guide_shell_install() {
+  error "지원되지 않는 shell입니다: ${SHELL:-알 수 없음}"
+  echo ""
+  echo "  STS Notifier는 zsh 또는 bash가 필요합니다."
+  echo "  아래 안내에 따라 설치 후 install.sh를 다시 실행해 주세요."
+  echo ""
+  case "$OS" in
+    macos)
+      echo "  [zsh 설치]"
+      echo "    brew install zsh"
+      echo "    chsh -s \$(which zsh)   # 기본 shell 변경"
+      echo "    터미널을 재시작한 뒤 ./install.sh 를 다시 실행하세요."
+      ;;
+    wsl|linux)
+      echo "  [zsh 설치]"
+      echo "    sudo apt install -y zsh"
+      echo "    chsh -s \$(which zsh)   # 기본 shell 변경"
+      echo "    터미널을 재시작한 뒤 ./install.sh 를 다시 실행하세요."
+      ;;
+    gitbash)
+      echo "  Git Bash는 bash를 기본으로 제공합니다."
+      echo "  Git이 올바르게 설치되어 있는지 확인하세요: https://git-scm.com"
+      ;;
+    *)
+      echo "  https://www.zsh.org 에서 zsh를 설치하세요."
+      ;;
+  esac
+  exit 1
+}
+
+# ─── OS / Shell 감지 실행 ─────────────────────────────────────────
+OS="$(detect_os)"
+SHELL_TYPE="$(detect_shell)"
+
+[[ "$SHELL_TYPE" == "unknown" ]] && guide_shell_install
+
+info "환경 감지: OS=$OS / Shell=$SHELL_TYPE"
