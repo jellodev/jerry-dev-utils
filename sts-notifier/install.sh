@@ -359,3 +359,155 @@ with open(sys.argv[3], 'w') as f:
 info "Claude Code statusLine 설정 중..."
 install_statusline_script
 install_settings_json
+
+# ─── rc 파일 자동 패치 ────────────────────────────────────────────
+
+# STS 발급 후 expiry를 저장하는 hook 코드 (마커로 감쌈)
+# 주의: 이 변수는 heredoc으로 정의하지 않고 단일 따옴표 문자열로 정의한다.
+#       실제 rc 파일에 삽입될 때 변수 확장이 일어나면 안 된다.
+_STS_HOOK_BLOCK='
+# __STS_EXPIRY_HOOK_START__ (sts-notifier 자동 삽입 - 수동 수정 금지)
+local __expiry_utc
+__expiry_utc=$(echo "${result:-}" | python3 -c "
+import sys, json
+try:
+    d = json.load(sys.stdin)
+    v = d.get(\"expires_at_utc\", \"\")
+    if v:
+        print(v)
+except Exception:
+    pass
+" 2>/dev/null || true)
+if [[ -n "${__expiry_utc:-}" && "${__expiry_utc:-}" != "null" ]]; then
+  echo "${__expiry_utc/ UTC/}" | sed "s/ /T/;s/\$/Z/" > "${HOME}/.sts_expiry"
+  rm -f "${HOME}/.sts_notified_1h" "${HOME}/.sts_notified_10m" "${HOME}/.sts_notified_expired"
+fi
+# __STS_EXPIRY_HOOK_END__'
+
+# 이미 패치됐는지 확인 (마커 기반)
+_is_already_patched() {
+  local rc_file="$1"
+  grep -q "__STS_EXPIRY_HOOK_START__" "$rc_file" 2>/dev/null
+}
+
+# python3로 _sts_update 함수의 닫는 } 줄 번호를 반환 (1-based)
+# 찾지 못하면 -1 반환
+_find_function_closing_brace() {
+  local rc_file="$1"
+  python3 - "$rc_file" <<'PYEOF'
+import sys
+
+rc_file = sys.argv[1]
+try:
+    with open(rc_file, encoding='utf-8', errors='replace') as f:
+        lines = f.readlines()
+except Exception as e:
+    print(-1)
+    sys.exit(0)
+
+in_func = False
+depth = 0
+
+for i, line in enumerate(lines):
+    stripped = line.strip()
+    # 주석 제거 (간단히 # 이후 무시 - 문자열 내 #은 오탐 가능하나 실용적으로 충분)
+    if '#' in stripped:
+        stripped = stripped[:stripped.index('#')].strip()
+
+    # 함수 선언 감지: _sts_update 포함 + { 포함
+    if not in_func and '_sts_update' in line and '{' in stripped:
+        in_func = True
+        depth = stripped.count('{') - stripped.count('}')
+        # depth가 이미 0 이하면 한 줄 함수 (드문 경우)
+        if depth <= 0:
+            print(i + 1)
+            sys.exit(0)
+        continue
+
+    if in_func:
+        depth += stripped.count('{') - stripped.count('}')
+        if depth <= 0:
+            print(i + 1)  # 1-based
+            sys.exit(0)
+
+# 찾지 못함
+print(-1)
+PYEOF
+}
+
+patch_rc_file() {
+  local rc_file
+  rc_file="$(get_rc_file)"
+
+  # rc 파일 없으면 생성 여부 확인
+  if [[ ! -f "$rc_file" ]]; then
+    warn "$rc_file 파일이 없습니다."
+    echo ""
+    ask "  새로 생성할까요? (y/N)"
+    read -r resp </dev/tty || resp=""
+    if [[ "${resp,,}" != "y" ]]; then
+      warn "rc 파일 패치를 건너뜁니다."
+      warn "STS 발급 시 expiry가 자동으로 저장되지 않습니다."
+      return 0
+    fi
+    touch "$rc_file"
+    success "$rc_file 생성됨"
+  fi
+
+  # 이미 패치됐으면 건너뜀 (멱등성)
+  if _is_already_patched "$rc_file"; then
+    success "$rc_file 이미 패치되어 있습니다. (건너뜀)"
+    return 0
+  fi
+
+  # 백업
+  cp "$rc_file" "${rc_file}.sts-notifier.bak"
+
+  # _sts_update 함수의 닫는 } 줄 번호 파악
+  local close_line
+  close_line="$(_find_function_closing_brace "$rc_file")"
+
+  local tmp_file
+  tmp_file="$(mktemp)"
+
+  if [[ "$close_line" -gt 0 ]]; then
+    # 함수 발견: 닫는 } 앞 줄에 hook 삽입
+    python3 - "$rc_file" "$close_line" "$_STS_HOOK_BLOCK" > "$tmp_file" <<'PYEOF'
+import sys
+
+rc_file    = sys.argv[1]
+close_line = int(sys.argv[2])  # 1-based
+hook_block = sys.argv[3]
+
+with open(rc_file, encoding='utf-8', errors='replace') as f:
+    lines = f.readlines()
+
+# close_line-1 인덱스(0-based) 앞에 삽입
+insert_at = close_line - 1
+lines.insert(insert_at, hook_block + '\n')
+
+sys.stdout.write(''.join(lines))
+PYEOF
+    mv "$tmp_file" "$rc_file"
+    success "_sts_update 함수에 expiry hook이 삽입됐습니다: $rc_file"
+  else
+    # 함수 미발견: 파일 끝에 독립 헬퍼 함수로 추가
+    {
+      cat "$rc_file"
+      printf '\n'
+      printf '# sts-notifier: STS 발급 함수를 찾지 못해 파일 끝에 추가했습니다.\n'
+      printf '# STS 발급 함수(_sts_update 등) 마지막 줄에 __sts_save_expiry 를 호출하세요.\n'
+      printf '__sts_save_expiry() {\n'
+      printf '%s\n' "$_STS_HOOK_BLOCK"
+      printf '}\n'
+    } > "$tmp_file"
+    mv "$tmp_file" "$rc_file"
+    warn "_sts_update 함수를 찾지 못했습니다."
+    warn "STS 발급 함수 안에서 '__sts_save_expiry' 를 직접 호출하세요."
+    warn "추가된 위치: $rc_file (파일 끝)"
+  fi
+}
+
+# ─── rc 파일 패치 실행 ────────────────────────────────────────────
+info "rc 파일 패치 중..."
+patch_rc_file
