@@ -511,3 +511,96 @@ PYEOF
 # ─── rc 파일 패치 실행 ────────────────────────────────────────────
 info "rc 파일 패치 중..."
 patch_rc_file
+
+# ─── 설치 후 자동 검증 ────────────────────────────────────────────
+
+verify_installation() {
+  echo ""
+  info "설치 검증 중..."
+  local failed=0
+
+  # 검증용 임시 expiry: 5분 후 만료 (10분 이내 알림 임계값 내)
+  local test_expiry
+  test_expiry=$(python3 -c "
+import datetime
+dt = datetime.datetime.utcnow() + datetime.timedelta(minutes=5)
+print(dt.strftime('%Y-%m-%dT%H:%M:%SZ'))
+")
+  echo "$test_expiry" > "$HOME/.sts_expiry"
+
+  # [검증 1] check-sts-expiry.sh 정상 실행 확인
+  if bash "$NOTIFIER_DIR/check-sts-expiry.sh" 2>/dev/null; then
+    success "[검증 1] check-sts-expiry.sh 정상 동작"
+  else
+    error "[검증 1] check-sts-expiry.sh 실행 실패"
+    failed=1
+  fi
+
+  # [검증 2] sts-statusline.sh 출력에 [STS] 포함 여부
+  local statusline_out
+  statusline_out=$(echo "" | bash "$NOTIFIER_DIR/sts-statusline.sh" 2>/dev/null \
+    | sed 's/\x1b\[[0-9;]*m//g' || true)
+  if [[ "$statusline_out" == *"[STS]"* ]]; then
+    success "[검증 2] sts-statusline.sh 출력 확인"
+    info "  출력 미리보기: $statusline_out"
+  else
+    error "[검증 2] sts-statusline.sh 출력 이상: '$statusline_out'"
+    failed=1
+  fi
+
+  # [검증 3] launchd 에이전트 로드 확인 (macOS 전용)
+  if [[ "$OS" == "macos" ]]; then
+    if launchctl list 2>/dev/null | grep -q "com.jellodev.sts-notifier"; then
+      success "[검증 3] launchd 에이전트 정상 로드"
+    else
+      error "[검증 3] launchd 에이전트 로드 실패"
+      failed=1
+    fi
+  fi
+
+  # 테스트용 expiry 정리
+  rm -f "$HOME/.sts_expiry"
+
+  return $failed
+}
+
+# ─── 검증 실행 ────────────────────────────────────────────────────
+if ! verify_installation; then
+  echo ""
+  error "일부 검증이 실패했습니다."
+  echo ""
+  echo "  로그 확인: /tmp/sts-notifier.err"
+  echo "  재설치:   ./install.sh"
+  exit 1
+fi
+
+# ─── 완료 요약 ────────────────────────────────────────────────────
+
+print_summary() {
+  local rc_file
+  rc_file="$(get_rc_file)"
+
+  echo ""
+  echo -e "${GREEN}╔══════════════════════════════════════════════════╗${RESET}"
+  echo -e "${GREEN}║${RESET}   ${BOLD}STS Notifier 설치 완료!${RESET}                       ${GREEN}║${RESET}"
+  echo -e "${GREEN}╠══════════════════════════════════════════════════╣${RESET}"
+
+  if [[ "$OS" == "macos" ]]; then
+    echo -e "${GREEN}║${RESET}  ${GREEN}✓${RESET} launchd 알림 데몬 (1분마다 만료 체크)      ${GREEN}║${RESET}"
+  fi
+
+  if [[ "$SKIP_STATUSLINE" == false ]]; then
+    echo -e "${GREEN}║${RESET}  ${GREEN}✓${RESET} Claude Code 하단 progress bar 활성화       ${GREEN}║${RESET}"
+  fi
+
+  echo -e "${GREEN}║${RESET}  ${GREEN}✓${RESET} ${rc_file} 패치 완료           ${GREEN}║${RESET}"
+  echo -e "${GREEN}║${RESET}  ${GREEN}✓${RESET} 동작 검증 통과                              ${GREEN}║${RESET}"
+  echo -e "${GREEN}╠══════════════════════════════════════════════════╣${RESET}"
+  echo -e "${GREEN}║${RESET}  ${BOLD}다음 단계:${RESET}                                      ${GREEN}║${RESET}"
+  echo -e "${GREEN}║${RESET}    source ${rc_file}                ${GREEN}║${RESET}"
+  echo -e "${GREEN}║${RESET}    이후 STS를 재발급하면 자동으로 동작합니다.  ${GREEN}║${RESET}"
+  echo -e "${GREEN}╚══════════════════════════════════════════════════╝${RESET}"
+  echo ""
+}
+
+print_summary
