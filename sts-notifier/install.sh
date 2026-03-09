@@ -326,16 +326,16 @@ except Exception as e:
   if [[ "$parse_result" == HAS_STATUSLINE* ]]; then
     local existing_json
     existing_json="$(echo "$parse_result" | tail -n 1)"
-    echo ""
-    warn "이미 statusLine이 설정되어 있습니다:"
-    echo "  $existing_json"
-    echo ""
-    ask "STS Notifier로 교체할까요? (y/N)"
-    read -r resp </dev/tty || resp=""
-    if [[ "${resp,,}" != "y" ]]; then
-      info "statusLine 설정을 건너뜁니다."
+
+    # 이미 sts-statusline.sh 를 가리키고 있으면 건너뜀 (재설치 멱등성)
+    if echo "$existing_json" | grep -q "sts-statusline.sh"; then
+      success "settings.json statusLine 이미 설정되어 있습니다. (건너뜀)"
       return 0
     fi
+
+    # 다른 command가 설정된 경우 → 자동으로 STS Notifier로 교체
+    warn "기존 statusLine을 STS Notifier로 교체합니다:"
+    echo "  기존: $existing_json"
   fi
 
   # 백업 후 수정 (tmpfile+mv: python3 실패 시 기존 파일 보존)

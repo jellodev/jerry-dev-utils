@@ -65,24 +65,26 @@ assert 'sts-statusline.sh' in d['statusLine'].get('command', ''), 'command shoul
 "
 }
 
-# ─── Test 2: existing statusLine preserved when user declines ──────────────
+# ─── Test 2: existing non-STS statusLine is replaced automatically ─────────
 
-@test "install preserves existing statusLine when user declines replacement" {
-  # Pre-populate settings.json with an existing statusLine
+@test "install replaces non-STS statusLine automatically and creates backup" {
+  # Pre-populate settings.json with a different statusLine
   cat > "$TEST_HOME/.claude/settings.json" <<'EOF'
 {"statusLine":{"type":"command","command":"/old/my-script.sh","padding":1}}
 EOF
 
-  # Send 'N' to decline replacement; 'y' for any other prompts
-  printf 'N\ny\n' | HOME="$TEST_HOME" PATH="$MOCK_BIN:$PATH" bash "$INSTALL" 2>/dev/null || true
+  printf 'y\ny\n' | HOME="$TEST_HOME" PATH="$MOCK_BIN:$PATH" bash "$INSTALL" 2>/dev/null || true
 
-  # Original command must be preserved
+  # command must now point to sts-statusline.sh
   val=$(python3 -c "
 import json
 d = json.load(open('$TEST_HOME/.claude/settings.json'))
 print(d['statusLine']['command'])
 ")
-  [ "$val" = "/old/my-script.sh" ]
+  [[ "$val" == *"sts-statusline.sh"* ]]
+
+  # backup file must exist
+  [ -f "$TEST_HOME/.claude/settings.json.sts-notifier.bak" ]
 }
 
 # ─── Test 3: rc patch is idempotent ────────────────────────────────────────
