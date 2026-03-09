@@ -218,7 +218,16 @@ install_launchd() {
   mkdir -p "$HOME/Library/LaunchAgents"
 
   # plist 내 경로 플레이스홀더를 실제 경로로 치환해 목적지에 쓰기
-  sed "s|REPLACE_WITH_SCRIPT_PATH|$script_path|g" "$plist_src" > "$plist_dst"
+  # python3로 리터럴 치환 (경로의 특수문자 안전 처리)
+  # 임시 파일에 먼저 쓴 뒤 mv (sed 실패 시 기존 plist 오염 방지)
+  local plist_tmp
+  plist_tmp="$(mktemp)"
+  python3 -c "
+import sys
+src = open(sys.argv[1]).read()
+print(src.replace('REPLACE_WITH_SCRIPT_PATH', sys.argv[2]), end='')
+" "$plist_src" "$script_path" > "$plist_tmp"
+  mv "$plist_tmp" "$plist_dst"
 
   # 이미 로드된 에이전트면 언로드 후 재로드 (업데이트 지원)
   if launchctl list 2>/dev/null | grep -q "com.jellodev.sts-notifier"; then
