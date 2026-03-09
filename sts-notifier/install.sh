@@ -528,8 +528,13 @@ print(dt.strftime('%Y-%m-%dT%H:%M:%SZ'))
 ")
   echo "$test_expiry" > "$HOME/.sts_expiry"
 
+  # set -euo pipefail 하에서 중간 실패 시에도 테스트 파일 정리 보장
+  # shellcheck disable=SC2064
+  trap "rm -f '$HOME/.sts_expiry'" RETURN
+
   # [검증 1] check-sts-expiry.sh 정상 실행 확인
-  if bash "$NOTIFIER_DIR/check-sts-expiry.sh" 2>/dev/null; then
+  # STS_NOTIFIER_VERIFY=1: check-sts-expiry.sh 내부에서 osascript(macOS 알림) 생략
+  if STS_NOTIFIER_VERIFY=1 bash "$NOTIFIER_DIR/check-sts-expiry.sh" 2>/dev/null; then
     success "[검증 1] check-sts-expiry.sh 정상 동작"
   else
     error "[검증 1] check-sts-expiry.sh 실행 실패"
@@ -539,7 +544,7 @@ print(dt.strftime('%Y-%m-%dT%H:%M:%SZ'))
   # [검증 2] sts-statusline.sh 출력에 [STS] 포함 여부
   local statusline_out
   statusline_out=$(echo "" | bash "$NOTIFIER_DIR/sts-statusline.sh" 2>/dev/null \
-    | sed 's/\x1b\[[0-9;]*m//g' || true)
+    | sed 's/\x1b\[[0-9;]*m//g; s/\x1b\[[^m]*m//g' || true)
   if [[ "$statusline_out" == *"[STS]"* ]]; then
     success "[검증 2] sts-statusline.sh 출력 확인"
     info "  출력 미리보기: $statusline_out"
@@ -557,9 +562,6 @@ print(dt.strftime('%Y-%m-%dT%H:%M:%SZ'))
       failed=1
     fi
   fi
-
-  # 테스트용 expiry 정리
-  rm -f "$HOME/.sts_expiry"
 
   return $failed
 }
