@@ -91,6 +91,10 @@ get_rc_file() {
         echo "$HOME/.bashrc"
       fi
       ;;
+    *)
+      # 이 분기에는 도달하지 않아야 하지만 방어적으로 처리
+      echo "$HOME/.bashrc"
+      ;;
   esac
 }
 
