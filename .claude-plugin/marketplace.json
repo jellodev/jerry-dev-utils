@@ -1,0 +1,15 @@
+{
+  "name": "jerry-dev-utils",
+  "owner": {
+    "name": "jellodev",
+    "url": "https://github.com/jellodev"
+  },
+  "description": "Claude Code 플러그인 마켓플레이스 — 개발 워크플로우 유틸리티 모음",
+  "plugins": [
+    {
+      "name": "jerry",
+      "description": "개발 워크플로우 스킬 모음. docs scaffold 생성(jerry-docs) 등 프로젝트 반복 작업 자동화",
+      "source": "./plugins/jerry"
+    }
+  ]
+}
