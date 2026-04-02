@@ -1,91 +1,112 @@
 # jerry-dev-utils
 
-Claude Code 플러그인 - 개발 워크플로우 유틸리티 커맨드 모음.
+Claude Code 플러그인 마켓플레이스 — 개발 워크플로우 유틸리티 모음.
 
-프로젝트에서 반복적으로 수행하는 작업을 `/슬래시 커맨드`로 자동화합니다.
+## 제공 플러그인
 
-## 커맨드 목록
+### jerry (스킬 모음)
+
+| 스킬 | 설명 |
+|------|------|
+| `jerry:jerry-docs` | 프로젝트 docs 표준 폴더 구조 한 번에 생성 |
+
+> `jerry` 하위에 스킬이 계속 추가될 예정입니다.
+
+### 커맨드
 
 | 커맨드 | 설명 |
-|---|---|
+|--------|------|
 | `/docs-update` | 프로젝트 루트 하위 MD 파일을 코드 현황에 맞게 최신화 |
 
-## Shell 유틸리티
-
-| 유틸리티 | 설명 |
-|---|---|
-| `sts-notifier` | STS 임시 자격증명 만료 1시간/10분 전 macOS 알림 + Claude Code 하단 progress bar. `./install.sh` 한 번으로 설치. |
-
-설치 방법: [`docs/sts-notifier-setup.md`](docs/sts-notifier-setup.md)
-
-테스트: `bats --recursive sts-notifier/test/` (requires `brew install bats-core`)
-
-## 요구사항
-
-- [Claude Code](https://claude.ai/code) 설치
-- GitHub 계정 및 SSH 설정
-
-## 설치
-
-### 1. 이 repo를 Claude Code 플러그인 경로에 clone
-
-```bash
-mkdir -p ~/.claude/plugins/marketplaces/my-plugins/plugins
-git clone git@github.com:jellodev/jerry-dev-utils.git \
-  ~/.claude/plugins/marketplaces/my-plugins/plugins/jerry-dev-utils
-```
-
-> SSH 대신 HTTPS를 사용한다면:
-> ```bash
-> git clone https://github.com/jellodev/jerry-dev-utils.git \
->   ~/.claude/plugins/marketplaces/my-plugins/plugins/jerry-dev-utils
-> ```
-
-### 2. Claude Code settings.json에 플러그인 등록
-
-`~/.claude/settings.json`을 열고 `enabledPlugins`에 아래 항목을 추가합니다.
-
-```json
-{
-  "enabledPlugins": {
-    "jerry-dev-utils@my-plugins": true
-  }
-}
-```
-
-`settings.json`이 없다면 위 내용으로 새로 생성하세요.
-
-### 3. Claude Code 재시작
-
-새 세션을 열면 커맨드를 바로 사용할 수 있습니다.
-
-```
-/docs-update
-```
-
-## 업데이트
-
-새 커맨드가 추가되거나 기존 커맨드가 수정되었을 때 아래 명령어로 최신 상태를 반영합니다.
-
-```bash
-git -C ~/.claude/plugins/marketplaces/my-plugins/plugins/jerry-dev-utils pull
-```
-
-## 기여
-
-새 커맨드를 추가하고 싶다면 `commands/` 폴더에 `.md` 파일을 추가하고 PR을 보내주세요.
-
-커맨드 파일 기본 구조:
-
-```markdown
----
-description: 커맨드 설명
-allowed-tools: Read, Glob, Grep, Bash
 ---
 
-## Your task
+## 👤 Human Guide — 설치 방법
 
-(작업 지시 내용)
+### 1. 마켓플레이스 등록
+
+Claude Code에서 아래 명령어로 이 레포를 마켓플레이스로 등록합니다.
+
+```
+/add-plugin jellodev/jerry-dev-utils
 ```
 
-파일명이 커맨드명이 됩니다. 예: `lint-check.md` → `/lint-check`
+> SSH 접근이 필요한 경우 Claude Code 설정에서 GitHub 인증을 먼저 완료하세요.
+
+### 2. jerry 플러그인 설치
+
+마켓플레이스 등록 후 `jerry` 플러그인을 설치합니다.
+
+```
+/install jerry
+```
+
+### 3. 스킬 사용
+
+새 세션을 열면 스킬이 활성화됩니다.
+
+```
+jerry-docs 구조 만들어줘
+docs scaffold 생성해줘
+backend/docs에 문서 폴더 초기화해줘
+```
+
+### 업데이트
+
+```
+/update jerry
+```
+
+---
+
+## 🤖 AI Agent Guide
+
+### 마켓플레이스 구조
+
+```
+jerry-dev-utils/               ← 마켓플레이스 루트 (jellodev/jerry-dev-utils)
+└── plugins/
+    └── jerry/                 ← 플러그인명
+        └── skills/
+            └── jerry-docs/    ← 스킬명 → jerry:jerry-docs 로 호출
+                ├── SKILL.md
+                └── scripts/
+                    └── scaffold.sh
+```
+
+### 스킬 호출
+
+```
+Skill tool → skill: "jerry:jerry-docs"
+```
+
+### jerry-docs 스킬 동작
+
+사용자가 docs 구조 생성을 요청하면:
+
+1. 대상 경로 확인 (미지정 시 `./docs`)
+2. `scripts/scaffold.sh <path>` 실행
+3. 생성 결과 안내
+
+생성 구조:
+```
+<docs-root>/
+├── PLANS.md
+├── SECURITY.md
+├── RELIABILITY.md
+├── ARCHITECTURE.md
+├── exec-plans/
+│   ├── active/
+│   ├── completed/
+│   └── tech-debt-tracker.md
+├── product-specs/
+│   └── index.md
+└── references/
+```
+
+### 새 스킬 추가 방법
+
+`plugins/jerry/skills/` 하위에 새 폴더를 만들고 `SKILL.md`를 작성하면 `jerry:<skill-name>` 으로 호출 가능합니다.
+
+```
+plugins/jerry/skills/<new-skill>/SKILL.md
+```
